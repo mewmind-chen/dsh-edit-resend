@@ -1,0 +1,26 @@
+# 本包的 loader 条目：**必须有这个 insert**。
+#
+# 机制（@deepseek-ai/dsh-app-boot 的 loadProfileDirectory）：
+#   profile 的 dsh.profile.bundles 列表本身**不挂载插件**，它只要求列表里每个
+#   包在自己的 package.json 里声明 "dsh": { "bundle": { "patch": "./cordis.patch.yml" } }，
+#   然后把这个 patch 文件当作该 bundle 的「层」加载。树里真正出现条目，靠的是
+#   这个 patch 里的 insert。
+#
+#   所以：bundles 列表负责"加载哪个补丁层"，这个 insert 负责"挂哪一行"。
+#   两者缺一不可，职责不同。
+#
+# 为什么曾经起不来（「Harness 暂时无法启动 / 组件 "edit-resend" 被重复定义」）：
+#   当时 profile 根目录的 cordis.patch.yml 里**也**手写了一条同名的
+#       - insert:
+#           - id: edit-resend
+#             name: dsh-edit-resend
+#   于是同一个 id 被挂了两次 → Cordis 报重复定义。
+#   正确做法就是现在这样：**只在插件自带的这个文件里 insert 一次**，
+#   profile 根目录那份 patch 不要碰 edit-resend。
+#
+# 独立安装路线（把本包做成 .tgz 再 pnpm add，不列入 bundles）走的是 profile 根
+# patch 的 insert，那种情况下把下面这段挪进 profile 的 cordis.patch.yml 即可，
+# 但**两种路线只能选一种**，不要同时用。
+- insert:
+    - id: edit-resend
+      name: dsh-edit-resend

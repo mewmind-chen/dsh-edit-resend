@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>dsh-edit-resend 真实浏览器测试</title>
+<style>
+  body { margin: 0; font: 14px/1.6 -apple-system, system-ui, sans-serif; background: #fff; color: #202124; }
+  .app { max-width: 760px; margin: 0 auto; padding: 24px 16px 160px; }
+  [data-chat-flow] { min-height: 92px; }
+  .Sixlwa_userRow { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; margin: 18px 0; }
+  .Sixlwa_userStack { max-width: 72%; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+  .Sixlwa_bubble { background: #eef5ff; border-radius: 18px; padding: 10px 16px; white-space: pre-wrap; }
+  .Sixlwa_actions { display: flex; height: 28px; align-items: center; }
+  .Sixlwa_actions button { width: 28px; height: 28px; border: 0; border-radius: 50%; background: transparent; color: #777; }
+  .assistantRow { margin: 12px 0; color: #777; }
+  .composerWrap { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid #eee; padding: 12px 16px; }
+  .composer { max-width: 760px; margin: 0 auto; background: #f5f5f5; border: 1px solid #ddd; border-radius: 16px;
+              padding: 12px; min-height: 44px; outline: none; }
+  .composer:focus { border-color: #777; }
+  #teststate { position: fixed; top: 8px; left: 8px; font: 12px/1.5 ui-monospace, monospace; color: #888; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div id="teststate"></div>
+
+<script src="./vendor/react.development.js"></script>
+<script src="./vendor/react-dom.development.js"></script>
+<script>
+/** 用真实 React 复刻 DSH 0.9.1 的关键 DOM、fiber hook 与 seq 边界。 */
+window.__DSH_TEST__ = {
+  commits: [], forks: [], opens: [], queueEdits: [], creates: [], pendingItem: null, lateCaptureCount: 0,
+  // 子会话表：fork 出来的会话带着「到锚点为止」的历史摘要。
+  forksInfo: {},
+}
+
+const sessionHandle = {
+  sessionId: 'session-old',
+  getSnapshot: () => ({ queue: window.__DSH_TEST__.pendingItem ? [window.__DSH_TEST__.pendingItem] : [] }),
+  updateQueue: async (itemId, action) => {
+    window.__DSH_TEST__.queueEdits.push({ itemId, action })
+    return { ok: true }
+  },
+  prompt: async () => ({ ok: true }),
+}
+
+const sessionsManager = {
+  binding: {},
+  fork: async (opts) => {
+    window.__DSH_TEST__.forks.push(opts)
+    window.__DSH_TEST__.lastFork = opts
+    return 'session-child-1'
+  },
+  open: async (childId) => {
+    window.__DSH_TEST__.opens.push(childId)
+    window.__DSH_TEST__.setView({ sessionId: childId, atSeq: window.__DSH_TEST__.lastFork.atSeq })
+    // 真实 DSH fork 会把前一轮 turn/end 后、下一轮 turn/start 前的 inbox
+    // splice 一并种进子会话；这就是插件必须原地 edit、不能再次 submit 的项。
+    window.__DSH_TEST__.setQueueState({
+      sessionId: childId,
+      queue: [{
+        id: 'inherited-second', rpcId: 'rpc-second', placement: 'queued',
+        text: MESSAGES[1].text, preview: MESSAGES[1].text,
+      }],
+    })
+  },
+}
+
+window.__ModuleLoader__ = (() => {
+  const modules = new Map()
+  return {
+    load(record) { modules.set(record.id, record) },
+    require(spec) {
+      if (spec === 'react') return window.React
+      const record = modules.get(spec) || modules.get(spec.replace(/\/client$/, ''))
+      if (!record) throw new Error(`test loader: no module "${spec}"`)
+      if (!record.__exports) record.__exports = record.factory(this.require.bind(this))
+      return record.__exports
+    },
+    ids: () => [...modules.keys()],
+  }
+})()
+
+const h = window.React.createElement
+const { useEffect, useRef, useState } = window.React
+const MESSAGES = [
+  { text: '第一条消息：帮我看下这个报错', seq: 11, turn: 1, turnStartSeq: 10, turnEndSeq: 19, rpcId: 'rpc-first' },
+  { text: '第二条消息：再检查一下权限', seq: 21, turn: 2, turnStartSeq: 20, turnEndSeq: 29, rpcId: 'rpc-second' },
+]
+
+function UserMessage({ message, node }) {
+  return h('div', { className: 'Sixlwa_userRow' },
+    h('div', { className: 'Sixlwa_userStack' },
+      h('div', { className: 'Sixlwa_bubble' }, message.text)),
+    h('div', { className: 'Sixlwa_actions' },
+      h('button', { type: 'button', 'aria-label': '复制' }, '□')))
+}
+
+function QueueSurface({ session, updateQueue }) {
+  if (!session.queue.length) return null
+  return h('div', { 'data-queue-dock': '' },
+    session.queue.map((item) => h('div', { key: item.id, 'data-test-queue-item': item.id }, item.text)))
+}
+
+function ConversationPanel() {
+  const [session] = useState(sessionHandle)
+  const [sessions] = useState(sessionsManager)
+  const [view, setView] = useState({ sessionId: 'session-old', atSeq: Infinity })
+  const [queueState, setQueueState] = useState({ sessionId: 'session-old', queue: [] })
+  const composerRef = useRef(null)
+
+  useEffect(() => {
+    window.__DSH_TEST__.setView = setView
+    window.__DSH_TEST__.setQueueState = setQueueState
+    window.__DSH_TEST__.session = session
+    window.__DSH_TEST__.sessions = sessions
+  }, [session, sessions])
+
+  const updateQueue = async (itemId, action) => {
+    window.__DSH_TEST__.queueEdits.push({ itemId, action, sessionId: queueState.sessionId })
+    setQueueState((current) => ({
+      ...current,
+      queue: current.queue.map((item) => item.id === itemId
+        ? { ...item, text: action.content?.[0]?.text || item.text, preview: action.content?.[0]?.text || item.preview }
+        : item),
+    }))
+  }
+
+  const visible = MESSAGES.filter((message) => message.seq <= view.atSeq)
+  return h('div', { className: 'app', 'data-session-id': view.sessionId },
+    visible.map((message, index) => {
+      const node = {
+        kind: 'user', anchorSeq: message.seq,
+        data: { seq: message.seq, source: { rpcId: message.rpcId } },
+        location: {
+          kind: 'step',
+          turn: {
+            turn: message.turn,
+            status: 'closed',
+            start: { seq: message.turnStartSeq },
+            end: { seq: message.turnEndSeq },
+          },
+        },
+      }
+      return h('div', {
+        key: message.rpcId, 'data-chat-flow': '', 'data-chat-flow-kind': 'user',
+        'data-chat-anchor-key': String(message.seq), 'data-chat-turn': String(index),
+      },
+        // 复刻真实 DSH 的切换时序：子会话已经打开、QueueDock 已是 child，
+        // 但消息 fiber 的 sessionId 仍可能短暂保留 parent。
+        h(UserMessage, { message, node, sessionId: 'session-old' }),
+        h('div', { className: 'assistantRow' }, `助手对第 ${index + 1} 条的回复`))
+    }),
+    h(QueueSurface, { session: queueState, updateQueue }),
+    h('div', { className: 'composerWrap', key: view.sessionId },
+      h('div', {
+        className: 'composer', contentEditable: true, suppressContentEditableWarning: true,
+        ref: composerRef, 'data-test-composer': '',
+        onKeyDown: (event) => {
+          if (event.key !== 'Enter' || event.shiftKey) return
+          event.preventDefault()
+          const text = (composerRef.current.textContent || '').trim()
+          if (!text) return
+          window.__DSH_TEST__.commits.push({ sessionId: view.sessionId, text })
+          composerRef.current.textContent = ''
+          renderState()
+        },
+      })))
+}
+
+function renderState() {
+  const t = window.__DSH_TEST__
+  const el = document.getElementById('teststate')
+  if (el) el.textContent = `commits=${t.commits.length} forks=${t.forks.length} queueEdits=${t.queueEdits.length}`
+}
+
+window.ReactDOM.render(h(ConversationPanel), document.getElementById('root'))
+const script = document.createElement('script')
+script.src = './client.js'
+script.onload = () => {
+  const mod = window.__ModuleLoader__.require('dsh-edit-resend')
+  window.__DSH_TEST__.moduleLoaded = window.__ModuleLoader__.ids().includes('dsh-edit-resend')
+  window.__DSH_TEST__.hasApply = typeof mod.apply === 'function'
+  try {
+    // 插件通过 ctx.get('sessions'/'conversation') 取服务。真实环境里会话对象
+    // 藏在 cordis 闭包中（扫 fiber 拿不到），所以插件改走显式依赖注入；
+    // 测试页必须用同样方式提供，否则测的不是真实路径。
+    const sessionsStub = {
+      fork: async (opts) => {
+        window.__DSH_TEST__.forks.push(opts)
+        const childId = `session-child-${window.__DSH_TEST__.forks.length}`
+        // 子会话的历史只到锚点为止：seq <= atSeq 的消息跟着进去，
+        // 被编辑的那条（seq > atSeq）不在其中。
+        window.__DSH_TEST__.forksInfo[childId] = { historySeq: opts.atSeq }
+        return { ok: true, value: { sessionId: childId } }
+      },
+      open: async (id) => {
+        window.__DSH_TEST__.opens.push(id)
+        // 模拟真实 DSH：open(child) 把界面切到子会话。子会话带着「到 fork 锚点
+        // 为止」的历史（这里用末尾 seq 表示），于是被编辑消息及其后的内容
+        // 在新会话里看不到——这正是 Codex 的语义。
+        const info = window.__DSH_TEST__.forksInfo[id]
+        if (typeof window.__DSH_TEST__.setView === 'function') {
+          window.__DSH_TEST__.setView({
+            sessionId: id,
+            atSeq: info ? info.historySeq : Infinity,
+            isChild: true,
+          })
+        }
+      },
+      create: async (opts) => {
+        window.__DSH_TEST__.creates.push(opts)
+        return { ok: true, value: { sessionId: `session-fresh-${window.__DSH_TEST__.creates.length}` } }
+      },
+      get: () => undefined,
+      scope: () => undefined,
+    }
+    mod.apply({
+      get: (name) => (name === 'sessions' ? sessionsStub : null),
+      effect: (fn) => { window.__DSH_TEST__.dispose = fn },
+    })
+    window.__DSH_TEST__.applied = true
+    // 比插件晚注册：用来证明 Enter 调了 stopImmediatePropagation。
+    document.addEventListener('keydown', () => { window.__DSH_TEST__.lateCaptureCount += 1 }, true)
+  } catch (error) {
+    window.__DSH_TEST__.applyError = String(error && error.message ? error.message : error)
+  }
+  renderState()
+}
+script.onerror = () => { window.__DSH_TEST__.scriptError = true }
+document.head.appendChild(script)
+</script>
+</body>
+</html>
