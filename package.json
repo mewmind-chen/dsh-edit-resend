@@ -18,12 +18,12 @@
   "keywords": ["dsh", "deepseek", "edit-and-resend", "cordis"],
   "repository": {
     "type": "git",
-    "url": "https://github.com/<you>/dsh-edit-resend.git"
+    "url": "https://github.com/mewmind-chen/dsh-edit-resend.git"
   },
   "bugs": {
-    "url": "https://github.com/<you>/dsh-edit-resend/issues"
+    "url": "https://github.com/mewmind-chen/dsh-edit-resend/issues"
   },
-  "homepage": "https://github.com/<you>/dsh-edit-resend#readme",
+  "homepage": "https://github.com/mewmind-chen/dsh-edit-resend#readme",
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
