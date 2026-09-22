@@ -49,7 +49,8 @@ edit-resend/
 │   └── index.js      主机半边（HTTP 端点 + surface replace + 备份）
 ├── cordis.patch.yml  loader 条目：把插件挂进插件树
 ├── package.json      包声明（dsh.bundle.patch / dsh.client.inject）
-├── smoke.mjs         离线回归（mock DOM，51 项）
+├── smoke.mjs         离线回归（mock DOM，60 项）
+├── realdeps.mjs       真依赖回归（DSH 本体的 dsh-session + dsh-llm，10 项）
 ├── browser-test/     真实浏览器测试（真 React + CDP）
 │   ├── index.html        测试页（复刻 DSH 的消息结构）
 │   ├── cdp-test.mjs      CDP 驱动的端到端用例
@@ -256,7 +257,8 @@ ls -t "$HOME/Library/Application Support/dsh-desktop/harness/edit-resend-backups
 
 ```bash
 cd /Users/ylf/Desktop/projects/dsh/edit-resend
-node smoke.mjs                 # 离线回归，期望 51/51
+node smoke.mjs                 # 离线回归，期望 60/60
+node realdeps.mjs              # 真依赖回归，期望 10/10
 ```
 
 真实浏览器（需调试 Chrome 在 9222）：
