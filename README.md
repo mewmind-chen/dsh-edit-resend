@@ -11,7 +11,7 @@ DSH（DeepSeek Harness）用户插件：把一条已发送的用户消息拿回*
 
 | 一半 | 机制 |
 | --- | --- |
-| 主机（`lib/index.js`） | `POST /edit-resend/rewrite` 路由；用 DSH 内部的 **surface replace**（compaction 同款）把 `[被编辑消息, surface 末尾]` 从模型可见历史盖掉，再用 `agent.wakeDriver()` 唤醒重答，全程只产生一条用户消息 |
+| 主机（`lib/index.js`） | `POST /edit-resend/rewrite` 路由；用 DSH 内部的 **surface replace**（compaction 同款）把 `[被编辑消息, surface 末尾]` 从模型可见历史盖掉，`sourceEventSeqs` 里顺带 cite 现存运行时快照（范围不动，下一轮必吐新鲜快照、必跑起来），再用 `agent.wakeDriver()` 唤醒重答，全程只产生一条用户消息 |
 | 客户端（`lib/client.js`） | 铅笔插进原生操作栏；改写成功后在 DOM 层藏掉被盖住的消息行、被编辑行换新文本（DSH 的 transcript 按设计只追加，replace 事件是纯模型侧的，屏幕必须由插件接管）；镜像记录落 `localStorage`，刷新后重放 |
 
 要点：只在 Agent 空闲时改写；失败不擅自发送，回填输入框并说明原因；`Option+Enter` 发送可在 toast 里看到定位数据（atSeq/范围/新 seq/轮次），截屏即可排查。

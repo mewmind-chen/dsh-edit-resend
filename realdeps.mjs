@@ -116,6 +116,33 @@ function surfaceTexts(session) {
   const retry = handleRewriteSync(session, seqB, '第二条：再改')
   check('旧 seq 明确拒绝', retry.ok === false, JSON.stringify(retry))
 }
+//#endregion
+
+//#region 5. 范围外现存快照被 cite（下一轮必跑）
+{
+  const session = new Session('test-session-snap', [], undefined, 'snapshot')
+  const seqA = session.append('user/message', userText('第一条'), { surfaceOp: 'append' }).seq
+  const snapSeq = session.append('user/message', {
+    content: [{ type: 'text', text: 'Current runtime context. snapshot' }],
+    source: { kind: 'plugin', plugin: '@deepseek-ai/dsh-system-prompt' },
+  }, { surfaceOp: 'append' }).seq
+  const seqB = session.append('user/message', userText('第二条'), { surfaceOp: 'append' }).seq
+  const result = handleRewriteSync(session, seqB, '第二条：改过')
+  check('改写成功', result.ok === true, JSON.stringify(result))
+  const replacement = session.eventAt(result.replacementSeq)
+  check('快照 seq 被 cite 进 provenance',
+    Array.isArray(replacement.sourceEventSeqs) && replacement.sourceEventSeqs.includes(snapSeq),
+    JSON.stringify(replacement.sourceEventSeqs))
+  check('范围没动（只盖被编辑处到末尾）',
+    result.shadowedRange[0] === seqB && result.shadowedRange[1] === seqB,
+    JSON.stringify(result.shadowedRange))
+  check('快照仍在 surface 上（没被多盖）',
+    surfaceSeqs(session).includes(snapSeq), JSON.stringify(surfaceSeqs(session)))
+  check('模型看到前文 + 快照 + 新文本',
+    JSON.stringify(surfaceTexts(session)) === JSON.stringify(['第一条', 'Current runtime context. snapshot', '第二条：改过']),
+    JSON.stringify(surfaceTexts(session)))
+}
+//#endregion
 
 console.log('dsh-edit-resend 真依赖回归')
 console.log('')

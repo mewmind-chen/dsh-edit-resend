@@ -130,6 +130,19 @@ session.append('user/message', newMessage, {
 
 ## 4. 修改日志
 
+### 2026-09-22 改写链路（surface replace + 唤醒 + 镜像）
+
+- 四次真机改写只有两次跑起来：空转的那两次，driver 首轮 `decision.messages`
+  为空（inbox 空 + 运行时快照无变化）→ `phase.step === 0` 直接 completed。
+  快照只在被盖住时才置空，所以“盖住快照的那次行，没盖住的行”。
+  → `sourceEventSeqs` 顺带 cite 现存快照（compaction 同款写法，范围不动），
+  下一轮必吐新鲜快照（UI 上的“上下文注入”行也回来了）。
+- 同一结论：`wakeDriver` 必须调（`kick` 直调必抛 `turn without driver reservation`）；
+  唤醒后检查 `status`，仍是 idle 就报 `KICK_FAILED`，不报假成功。
+- 屏幕侧：DSH transcript 按设计只追加，replace 纯模型侧 → 插件在 DOM 层
+  按 turn 容器隐藏 + 被编辑行换字，记录落 `localStorage`（v3），刷新重放；
+  提交时刻拍 turn 下标快照，新长的 turn 永不误藏。
+
 ### 2026-09-21 初版
 
 - 浮层按钮 + 鼠标坐标热区 → **持续闪烁**（反馈循环，见 2.1）
