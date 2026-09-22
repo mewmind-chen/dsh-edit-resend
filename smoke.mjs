@@ -813,7 +813,7 @@ editorM.dispatchEvent(new globalThis.KeyboardEvent('keydown', { key: 'Enter', bu
 await settle(900)
 check('镜像：改写请求发出', rewriteCalls.length === 1, JSON.stringify(rewriteCalls))
 const sidM = rewriteCalls[0]?.body?.sessionId
-const storeM = JSON.parse(globalThis.localStorage.getItem('dsh-edit-resend.mirror.v2') || '{}')
+const storeM = JSON.parse(globalThis.localStorage.getItem('dsh-edit-resend.mirror.v3') || '{}')
 const editsM = Array.isArray(storeM[sidM]) ? storeM[sidM] : (storeM[sidM] && storeM[sidM].edits) || []
 check('镜像：改写记录落盘', editsM.length === 1
   && editsM[0].text === '第二条消息：镜像改写', JSON.stringify(storeM))
